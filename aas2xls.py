@@ -35,7 +35,7 @@ import openpyxl as xl
 import json
 from openpyxl.styles import Alignment
 
-PARSER_VERSION_STRING = '2021.06.22.build-1'
+PARSER_VERSION_STRING = '2021.10.07.build-1'
 
 
 # chohpower
@@ -47,7 +47,66 @@ if len(sys.argv) != 4:
     sys.exit()
 
 
+#-------------------- count variables ------------------------------
+count_asset = 0
+count_asset_invalid = 0
 
+count_aas = 0
+count_aas_invalid = 0
+count_aas_no_submodel = 0
+
+count_submodel = 0
+count_submodel_invalid = 0
+count_submodel_unmatch = 0
+
+count_property = 0
+count_property_no_value_type = 0
+count_property_no_value = 0
+count_property_cd_unmatch = 0
+count_property_no_preferred_name = 0
+count_property_no_short_name = 0
+count_property_no_definition = 0
+count_property_invalid = 0
+
+count_collection = 0
+count_collection_invalid = 0
+
+count_concept_description = 0
+
+def outValidataionResult(fp):
+    fp.write("\n-------------------- validataion report -------------------")
+    fp.write('\nnumber of asset : ok........{}'.format(count_asset))
+    fp.write('\nnumber of asset : invalid...{}'.format(count_asset_invalid))
+    fp.write("\n")
+
+    fp.write('\nnumber of asset-administration-shell : ok.........................{}'.format(count_aas))
+    fp.write('\nnumber of asset-administration-shell : ok (no submodel defined)...{}'.format(count_aas_no_submodel))
+    fp.write('\nnumber of asset-administration-shell : invalid....................{}'.format(count_aas_invalid))
+    fp.write("\n")
+
+    fp.write('\nnumber of submodel : ok...........................................................{}'.format(count_submodel))
+    fp.write('\nnumber of submodel : ok (defined in AAS, but actual information is not defined)...{}'.format(count_submodel_unmatch))
+    fp.write('\nnumber of submodel : invalid......................................................{}'.format(count_submodel_invalid))
+    fp.write("\n")
+
+    fp.write('\nnumber of property : ok...........................................................{}'.format(count_property))
+    fp.write('\nnumber of property : ok (value-type is not assigned)..............................{}'.format(count_property_no_value_type))
+    fp.write('\nnumber of property : ok (initial-value is not assigned)...........................{}'.format(count_property_no_value))
+    fp.write('\nnumber of property : ok (concept-description is not matched)......................{}'.format(count_property_cd_unmatch))
+    fp.write('\nnumber of property : ok (preferred-name is not assigned in concept-description)...{}'.format(count_property_no_preferred_name))
+    fp.write('\nnumber of property : ok (short-name is not assigned in concept-description).......{}'.format(count_property_no_short_name))
+    fp.write('\nnumber of property : ok (definition is not assigned in concept-description).......{}'.format(count_property_no_definition))
+    fp.write('\nnumber of property : invalid......................................................{}'.format(count_property_invalid))
+    fp.write("\n")
+
+    fp.write('\nnumber of submodel-element-collection : ok........{}'.format(count_collection))
+    fp.write('\nnumber of submodel-element-collection : invalid...{}'.format(count_collection_invalid))
+    fp.write("\n")
+
+    fp.write('\nnumber of concept-description : ok...{}'.format(count_concept_description))
+
+    fp.write("\n")
+    return
 
 #-------------------- common sub functions --------------------------
 VTYPE_STRING            = 'string'
@@ -384,6 +443,22 @@ def writeSubmodel(sm):
         return None
 
     row[COLUMN_ASSET_AAS_SM_ID_IRI] = submodelId
+    
+    
+    # parsing 'output string'
+    optionStringList = []
+
+    optCategory = getDictItem(sm, 'category')
+    if optCategory != None:
+        optionStringList.append('category={}'.format(optCategory))
+
+    optKind = getDictItem(sm, 'kind')
+    if optKind != None:
+        optionStringList.append('kind={}'.format(optKind))
+
+    if len(optionStringList) > 0:
+        optionString = ','.join(optionStringList)
+        row[COLUMN_OPTIONS] = optionString
 
     # parsing 'semanticId - keys - type/local/value'
     semanticKeys = getDictItem_depth2(sm, 'semanticId', 'keys')
@@ -420,6 +495,16 @@ def writeSubmodel(sm):
 
 
 def writeProperty(prop, smeType, conceptDictionary):
+    global count_property
+    global count_property_no_value_type
+    global count_property_no_value
+    global count_property_cd_unmatch
+    global count_property_no_preferred_name
+    global count_property_no_short_name
+    global count_property_no_definition
+    global count_property_invalid
+
+    
     row = [None for i in range(MAX_EXCEL_COLUMNS)]
 
     # parsing 'idShort'
@@ -468,6 +553,7 @@ def writeProperty(prop, smeType, conceptDictionary):
         row[COLUMN_PROPERTY_VALUE_TYPE] = getDictItem_depth3(prop, 'valueType', 'dataObjectType', 'name' )
         if row[COLUMN_PROPERTY_VALUE_TYPE] == None:
             outMessage('warning: valueType is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+            count_property_no_value_type += 1
      
     # parsing 'initial value'
     valueObject = getDictItem(prop, 'value')
@@ -489,6 +575,7 @@ def writeProperty(prop, smeType, conceptDictionary):
             row[COLUMN_INITIAL_VALUE] = valueObject
     else:
         outMessage('warning: value is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+        count_property_no_value += 1
      
 
         
@@ -500,6 +587,7 @@ def writeProperty(prop, smeType, conceptDictionary):
         #outMessage('error  : invalid semanticId-keys in Property "{}"'.format(idShort))
         #return None
         outMessage('warning: invalid semanticId-keys in Property "{}"'.format(idShort))
+        count_property_cd_unmatch += 1
         return row
 
     # change 'semanticId' from Mandatory to Optional
@@ -507,6 +595,7 @@ def writeProperty(prop, smeType, conceptDictionary):
         #outMessage('error  : no semanticId-keys  in Property "{}"'.format(idShort))
         #return None
         outMessage('warning: no semanticId-keys  in "{}"'.format(row[COLUMN_PROPERTY]))
+        count_property_cd_unmatch += 1
         return row
 
 
@@ -516,11 +605,13 @@ def writeProperty(prop, smeType, conceptDictionary):
     semanticIdType = getDictItem(semanticKeys[0], 'idType')
     if semanticIdType == None:
         outMessage('warning: semanticId-keys in "{}" has no "idType"'.format(row[COLUMN_PROPERTY]))
+        count_property_cd_unmatch += 1
         return row
 
     conceptId = getDictItem(semanticKeys[0], 'value')
     if conceptId == None:
         outMessage('warning: semanticId-keys in "{}" has no "value"'.format(row[COLUMN_PROPERTY]))
+        count_property_cd_unmatch += 1
         return row
 
     # find ConceptDescription 
@@ -554,6 +645,7 @@ def writeProperty(prop, smeType, conceptDictionary):
 
                 else:
                     outMessage('warning: "PreferredName" of ConceptDescription is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+                    count_property_no_preferred_name += 1
 
                 # parsing 'shortName'
                 shortName = getDictItem_depth2(embeddedDataSpecs[0], 'dataSpecificationContent', 'shortName')
@@ -561,8 +653,9 @@ def writeProperty(prop, smeType, conceptDictionary):
                     row[COLUMN_SEMANTICS_SHORT_NAME] = mlValueToString(shortName)
 
                 else:
-                    outMessage('warning: "PreferredName" of ConceptDescription is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
-        
+                    outMessage('warning: "shortName" of ConceptDescription is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+                    count_property_no_short_name += 1
+
                 # parsing 'definition'
                 definition = getDictItem_depth2(embeddedDataSpecs[0], 'dataSpecificationContent', 'definition')
                 if definition != None:
@@ -570,6 +663,7 @@ def writeProperty(prop, smeType, conceptDictionary):
 
                 else:
                     outMessage('warning: "definition" of ConceptDescription is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+                    count_property_no_definition += 1
 
 
                 # parsing 'unit' and 'dataType'
@@ -578,12 +672,15 @@ def writeProperty(prop, smeType, conceptDictionary):
 
             else:
                 outMessage('warning: ConceptDescription has no valid "embeddedDataSpecifications" in "{}"'.format(row[COLUMN_PROPERTY]))
+                count_property_cd_unmatch += 1
 
         else:
             outMessage('warning: ConceptDescription is not specified in "{}"'.format(row[COLUMN_PROPERTY]))
+            count_property_cd_unmatch += 1
      
     else:
         outMessage('warning: ConceptDescription has no "embeddedDataSpecifications" in "{}"'.format(row[COLUMN_PROPERTY]))
+        count_property_cd_unmatch += 1
      
 
     #excelRows.append(row)
@@ -747,6 +844,12 @@ def writeSMECollection(collection, depth, conceptDictionary):
 
 def writeSME(sme, depth, rowBase, conceptDictionary):
 
+    global count_property
+    global count_property_invalid
+    global count_collection
+    global count_collection_invalid
+
+
     smeType = getSMElementType(sme)
     if smeType == None:
         return rowBase
@@ -756,21 +859,27 @@ def writeSME(sme, depth, rowBase, conceptDictionary):
     if smeType == SMETYPE_PROPERTY or smeType == SMETYPE_MLP or smeType == SMETYPE_FILE or smeType == SMETYPE_REF:
         row = writeProperty(sme, smeType, conceptDictionary)
         if row != None:
+            count_property += 1
             if depth == 0:
                 excelRows.insert(rowBase, row)
                 rowBase += 1
             else:
                 excelRows.append(row)
+        else:
+            count_property_invalid += 1
 
     elif smeType == SMETYPE_COLLECTION:
         row = writeSMECollection(sme, depth, conceptDictionary)
         if row != None:
+            count_collection += 1
             excelRows.append(row)
 
             subElements = getDictItem(sme, 'value')
             if subElements != None:
                 for element in subElements:
                     writeSME(element, depth + 1, rowBase, conceptDictionary)
+        else:
+            count_collection_invalid += 1
 
     return rowBase
 
@@ -802,42 +911,54 @@ with open(sys.argv[1], mode= 'rt') as aas_file:
         elif aasx_key.lower() == 'conceptdescriptions':
             conceptDescriptions = aasx[aasx_key]
 
+    count_concept_description = len(conceptDescriptions)
+
     # fill excel file
     for asset in assets:
         row_asset = writeAsset(asset)
         if row_asset == None:
+            count_asset_invalid += 1
             continue
+
         else:
             excelRows.append(row_asset)
+            count_asset += 1
 
         #find 'adminShell' linked to this 'asset'
         shell = getAdminShellFor(adminShells, row_asset[COLUMN_ASSET_AAS_SM_ID_IRI])
         if shell == None:
             outMessage('warning: no adminShell for asset "{}" is defined'.format(row_asset[COLUMN_ASSET]))
+            count_asset_invalid += 1
             continue
 
         row_shell = writeAdminShell(shell)
         if row_shell == None:
+            count_aas_invalid += 1
             continue
+
         else:
             excelRows.append(row_shell)
+            count_aas += 1
 
         listSubmodel = getDictItem(shell, 'submodels')
         if listSubmodel == None:
+            count_aas_no_submodel += 1
             continue
 
         # writing 'Submodel' of selected 'AdminShell'
         for smInShell in listSubmodel:
             sm = getSubmodel(submodels, smInShell)
             if sm == None:
+                count_submodel_unmatch += 1
                 continue
 
             row_sm = writeSubmodel(sm)
             if row_sm == None:
+                count_submodel_invalid += 1
                 continue
             else:
                 excelRows.append(row_sm)
-
+                count_submodel += 1
 
             smc_depth   = 0 # submodel collection depth
             row_begin   = len(excelRows)
@@ -871,6 +992,7 @@ if len(excelRows) > 0:
     xls_wb.close()
 
 outMessage('Completed...')
+outValidataionResult(fp_result)
 
 # close result file
 fp_result.close()
